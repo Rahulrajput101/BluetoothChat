@@ -25,7 +25,9 @@ import com.ondevop.bluetoothchat.presentation.BluetoothViewModel
 fun DeviceScreen(
     state: BluetoothUiState,
     onStartScan: () -> Unit,
-    onStopScan: () -> Unit
+    onStopScan: () -> Unit,
+    onDeviceClick: (BluetoothDevice) -> Unit,
+    onStartServer: ()->Unit
 ) {
     Column(
         modifier = Modifier
@@ -34,7 +36,9 @@ fun DeviceScreen(
         BluetoothDeviceList(
             pairedDevices = state.paredDevices,
             scannedDevices = state.scannedDevice,
-            onClick = {},
+            onClick = { bluetoothDevice ->
+                      onDeviceClick(bluetoothDevice)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -48,6 +52,9 @@ fun DeviceScreen(
             }
             Button(onClick = onStopScan) {
                 Text(text = "Stop scan")
+            }
+            Button(onClick =  onStartServer) {
+                Text(text = "Start Server")
             }
         }
     }
