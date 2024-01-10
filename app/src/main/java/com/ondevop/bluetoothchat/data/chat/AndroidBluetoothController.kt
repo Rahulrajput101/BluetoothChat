@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.input.key.Key.Companion.D
 import com.ondevop.bluetoothchat.domain.chat.BluetoothController
 import com.ondevop.bluetoothchat.domain.chat.BluetoothDeviceDomain
+import com.ondevop.bluetoothchat.domain.chat.BluetoothMessage
 import com.ondevop.bluetoothchat.domain.chat.ConnectionResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +25,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -46,6 +49,7 @@ class AndroidBluetoothController(
         bluetoothManager?.adapter
     }
 
+    private var dataTransferService : BluetoothDataTransferService? = null
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean>
@@ -145,6 +149,12 @@ class AndroidBluetoothController(
                 emit(ConnectionResult.ConnectionEstablished)
                 currentClientSocket?.let {
                   currentServerSocket?.close()
+                    val service = BluetoothDataTransferService(it)
+                    dataTransferService = service
+
+                    emitAll(service.listenForIncomingMessage().map {
+                        ConnectionResult.TransferredSucceeded(it)
+                    })
 
                 }
             }
@@ -169,6 +179,15 @@ class AndroidBluetoothController(
                     socket.connect()
                     emit(ConnectionResult.ConnectionEstablished)
 
+                    BluetoothDataTransferService(socket).also {
+                        dataTransferService = it
+
+                        emitAll(it.listenForIncomingMessage().map {
+                            ConnectionResult.TransferredSucceeded(it)
+                        })
+                    }
+
+
                 }catch (e: Exception){
                     socket.close()
                     currentClientSocket = null
@@ -183,6 +202,23 @@ class AndroidBluetoothController(
         }.flowOn(Dispatchers.IO)
     }
 
+    override suspend fun trySendMessage(message: String): BluetoothMessage? {
+         if(!hasPermission(Manifest.permission.BLUETOOTH_CONNECT)){
+             return null
+         }
+
+        if (dataTransferService == null) return null
+
+        val bluetoothMessage = BluetoothMessage(
+            message = message,
+            senderName = bluetoothAdapter?.name ?: "Unkown Name",
+            isFromLocal = true
+        )
+
+        dataTransferService?.sendMessage(bluetoothMessage.toByteArray())
+        return bluetoothMessage
+
+    }
     override fun closeConnection() {
         currentClientSocket?.close()
         currentServerSocket?.close()
